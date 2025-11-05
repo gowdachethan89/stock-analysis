@@ -92,6 +92,12 @@ public class StockData {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "high")
+    private BigDecimal high;
+
+    @Column(name = "low")
+    private BigDecimal low;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

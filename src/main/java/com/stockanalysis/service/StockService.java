@@ -8,12 +8,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Comparator;
+import java.util.Objects;
 
 @Service
 public class StockService {
@@ -27,14 +29,20 @@ public class StockService {
             StockData stockData = new StockData();
 
             stockData.setSymbol(symbol);
-            stockData.setPrice(stock.getQuote().getPrice());
+            stockData.setCurrentPrice(stock.getQuote().getPrice());
             stockData.setChange(stock.getQuote().getChange());
             stockData.setChangePercent(stock.getQuote().getChangeInPercent());
+            stockData.setDayHigh(stock.getQuote().getDayHigh());
+            stockData.setDayLow(stock.getQuote().getDayLow());
+            stockData.setVolume(stock.getQuote().getVolume());
+            stockData.setOpen(stock.getQuote().getOpen());
+            stockData.setPreviousClose(stock.getQuote().getPreviousClose());
+            stockData.setMarketCap(stock.getStats().getMarketCap());
+            stockData.setLastUpdateTime(LocalDateTime.now());
+
+            // Also set the high and low values
             stockData.setHigh(stock.getQuote().getDayHigh());
             stockData.setLow(stock.getQuote().getDayLow());
-            stockData.setVolume(stock.getQuote().getVolume());
-            stockData.setMarketCap(stock.getStats().getMarketCap());
-            stockData.setTimestamp(LocalDateTime.now());
 
             // Calculate technical indicators
             List<StockData> historicalData = getStockHistory(symbol);
@@ -69,18 +77,18 @@ public class StockService {
         if (historicalData.size() >= 20) {
             BigDecimal ma20 = historicalData.stream()
                     .limit(20)
-                    .map(StockData::getPrice)
+                    .map(StockData::getCurrentPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(20), 2, BigDecimal.ROUND_HALF_UP);
+                    .divide(BigDecimal.valueOf(20), 2, RoundingMode.HALF_UP);
             currentData.setMa20(ma20);
         }
 
         if (historicalData.size() >= 50) {
             BigDecimal ma50 = historicalData.stream()
                     .limit(50)
-                    .map(StockData::getPrice)
+                    .map(StockData::getCurrentPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(50), 2, BigDecimal.ROUND_HALF_UP);
+                    .divide(BigDecimal.valueOf(50), 2, RoundingMode.HALF_UP);
             currentData.setMa50(ma50);
         }
     }
@@ -90,15 +98,15 @@ public class StockService {
             // Calculate 20-day SMA
             BigDecimal sma = historicalData.stream()
                     .limit(20)
-                    .map(StockData::getPrice)
+                    .map(StockData::getCurrentPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(20), 2, BigDecimal.ROUND_HALF_UP);
+                    .divide(BigDecimal.valueOf(20), 2, RoundingMode.HALF_UP);
 
             // Calculate Standard Deviation
             double sumSquaredDiff = historicalData.stream()
                     .limit(20)
                     .mapToDouble(data ->
-                            Math.pow(data.getPrice().subtract(sma).doubleValue(), 2))
+                            Math.pow(data.getCurrentPrice().subtract(sma).doubleValue(), 2))
                     .sum();
             double standardDeviation = Math.sqrt(sumSquaredDiff / 20);
 
@@ -115,21 +123,21 @@ public class StockService {
 
             BigDecimal lowestLow = period.stream()
                     .map(StockData::getLow)
-                    .min(BigDecimal::compareTo)
+                    .min(Comparator.naturalOrder())
                     .orElse(BigDecimal.ZERO);
 
             BigDecimal highestHigh = period.stream()
                     .map(StockData::getHigh)
-                    .max(BigDecimal::compareTo)
+                    .max(Comparator.naturalOrder())
                     .orElse(BigDecimal.ZERO);
 
             // Calculate %K
-            BigDecimal currentPrice = currentData.getPrice();
+            BigDecimal currentPrice = currentData.getCurrentPrice();
             BigDecimal range = highestHigh.subtract(lowestLow);
             if (range.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal k = currentPrice.subtract(lowestLow)
                         .multiply(BigDecimal.valueOf(100))
-                        .divide(range, 2, BigDecimal.ROUND_HALF_UP);
+                        .divide(range, 2, RoundingMode.HALF_UP);
                 currentData.setStochasticK(k);
 
                 // Calculate %D (3-day SMA of %K)
@@ -137,9 +145,9 @@ public class StockService {
                     BigDecimal d = historicalData.stream()
                             .limit(3)
                             .map(StockData::getStochasticK)
-                            .filter(stoch -> stoch != null)
+                            .filter(Objects::nonNull)
                             .reduce(BigDecimal.ZERO, BigDecimal::add)
-                            .divide(BigDecimal.valueOf(3), 2, BigDecimal.ROUND_HALF_UP);
+                            .divide(BigDecimal.valueOf(3), 2, RoundingMode.HALF_UP);
                     currentData.setStochasticD(d);
                 }
             }
@@ -156,8 +164,8 @@ public class StockService {
 
                 if (previous != null) {
                     BigDecimal tr1 = current.getHigh().subtract(current.getLow());
-                    BigDecimal tr2 = current.getHigh().subtract(previous.getPrice()).abs();
-                    BigDecimal tr3 = current.getLow().subtract(previous.getPrice()).abs();
+                    BigDecimal tr2 = current.getHigh().subtract(previous.getCurrentPrice()).abs();
+                    BigDecimal tr3 = current.getLow().subtract(previous.getCurrentPrice()).abs();
 
                     BigDecimal trueRange = tr1.max(tr2).max(tr3);
                     trueRanges.add(trueRange);
@@ -168,7 +176,7 @@ public class StockService {
             if (!trueRanges.isEmpty()) {
                 BigDecimal atr = trueRanges.stream()
                         .reduce(BigDecimal.ZERO, BigDecimal::add)
-                        .divide(BigDecimal.valueOf(trueRanges.size()), 2, BigDecimal.ROUND_HALF_UP);
+                        .divide(BigDecimal.valueOf(trueRanges.size()), 2, RoundingMode.HALF_UP);
                 currentData.setAtr(atr);
             }
         }
@@ -186,13 +194,13 @@ public class StockService {
                 // Calculate typical price
                 BigDecimal currentTP = current.getHigh()
                         .add(current.getLow())
-                        .add(current.getPrice())
-                        .divide(BigDecimal.valueOf(3), 2, BigDecimal.ROUND_HALF_UP);
+                        .add(current.getCurrentPrice())
+                        .divide(BigDecimal.valueOf(3), 2, RoundingMode.HALF_UP);
 
                 BigDecimal previousTP = previous.getHigh()
                         .add(previous.getLow())
-                        .add(previous.getPrice())
-                        .divide(BigDecimal.valueOf(3), 2, BigDecimal.ROUND_HALF_UP);
+                        .add(previous.getCurrentPrice())
+                        .divide(BigDecimal.valueOf(3), 2, RoundingMode.HALF_UP);
 
                 // Calculate money flow
                 BigDecimal rawMoneyFlow = currentTP.multiply(BigDecimal.valueOf(current.getVolume()));
@@ -211,10 +219,10 @@ public class StockService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             if (negativeFlowSum.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal moneyRatio = positiveFlowSum.divide(negativeFlowSum, 2, BigDecimal.ROUND_HALF_UP);
+                BigDecimal moneyRatio = positiveFlowSum.divide(negativeFlowSum, 2, RoundingMode.HALF_UP);
                 BigDecimal mfi = BigDecimal.valueOf(100)
                         .subtract(BigDecimal.valueOf(100)
-                                .divide(BigDecimal.ONE.add(moneyRatio), 2, BigDecimal.ROUND_HALF_UP));
+                                .divide(BigDecimal.ONE.add(moneyRatio), 2, RoundingMode.HALF_UP));
                 currentData.setMfi(mfi);
             }
         }
@@ -228,7 +236,7 @@ public class StockService {
             double losses = 0;
 
             for (int i = 0; i < rsiData.size() - 1; i++) {
-                BigDecimal change = rsiData.get(i).getPrice().subtract(rsiData.get(i + 1).getPrice());
+                BigDecimal change = rsiData.get(i).getCurrentPrice().subtract(rsiData.get(i + 1).getCurrentPrice());
                 if (change.compareTo(BigDecimal.ZERO) > 0) {
                     gains += change.doubleValue();
                 } else {
@@ -245,6 +253,36 @@ public class StockService {
         }
     }
 
+    private BigDecimal calculateEMA(List<StockData> data, int period) {
+        BigDecimal multiplier = BigDecimal.valueOf(2.0 / (period + 1));
+        BigDecimal initialSMA = data.stream()
+                .limit(period)
+                .map(StockData::getCurrentPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(period), 2, RoundingMode.HALF_UP);
+
+        return data.stream()
+                .skip(period -1)
+                .limit(1)
+                .map(StockData::getCurrentPrice)
+                .map(price -> price.multiply(multiplier)
+                        .add(initialSMA.multiply(BigDecimal.ONE.subtract(multiplier))))
+                .findFirst()
+                .orElse(initialSMA);
+    }
+
+    private BigDecimal calculateSignalLine(List<StockData> data) {
+        if (data.size() >= 9) {
+            return data.stream()
+                    .limit(9)
+                    .map(StockData::getMacd)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(9), 2, RoundingMode.HALF_UP);
+        }
+        return null;
+    }
+
     private void calculateMACD(StockData currentData, List<StockData> historicalData) {
         if (historicalData.size() >= 26) {
             // Calculate 12-day EMA
@@ -258,47 +296,18 @@ public class StockService {
 
             // Calculate Signal Line (9-day EMA of MACD)
             BigDecimal signalLine = calculateSignalLine(historicalData);
-            currentData.setSignalLine(signalLine);
-
-            // MACD Histogram = MACD Line - Signal Line
-            currentData.setMacdHistogram(macd.subtract(signalLine));
+            if (signalLine != null) {
+                currentData.setSignalLine(signalLine);
+                // MACD Histogram = MACD Line - Signal Line
+                currentData.setMacdHistogram(macd.subtract(signalLine));
+            }
         }
-    }
-
-    private BigDecimal calculateEMA(List<StockData> data, int period) {
-        BigDecimal multiplier = BigDecimal.valueOf(2.0 / (period + 1));
-        BigDecimal initialSMA = data.stream()
-                .limit(period)
-                .map(StockData::getPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(period), 2, BigDecimal.ROUND_HALF_UP);
-
-        return data.stream()
-                .skip(period -1)
-                .limit(1)
-                .map(StockData::getPrice)
-                .map(price -> price.multiply(multiplier)
-                        .add(initialSMA.multiply(BigDecimal.ONE.subtract(multiplier))))
-                .findFirst()
-                .orElse(initialSMA);
-    }
-
-    private BigDecimal calculateSignalLine(List<StockData> data) {
-        if (data.size() >= 9) {
-            return data.stream()
-                    .limit(9)
-                    .map(StockData::getMacd)
-                    .filter(macd -> macd != null)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(9), 2, BigDecimal.ROUND_HALF_UP);
-        }
-        return null;
     }
 
     public Map<String, Object> getTechnicalIndicators(StockData stockData) {
         Map<String, Object> technicalData = new HashMap<>();
         technicalData.put("symbol", stockData.getSymbol());
-        technicalData.put("price", stockData.getPrice());
+        technicalData.put("price", stockData.getCurrentPrice());
 
         // Moving Averages
         technicalData.put("ma20", stockData.getMa20());
@@ -331,15 +340,67 @@ public class StockService {
     }
 
     public StockData getLatestStockData(String symbol) {
-        return stockDataRepository.findFirstBySymbolOrderByTimestampDesc(symbol);
+        return stockDataRepository.findFirstBySymbolOrderByLastUpdateTimeDesc(symbol);
     }
 
     public List<StockData> getStockHistory(String symbol) {
-        return stockDataRepository.findBySymbolOrderByTimestampDesc(symbol);
+        return stockDataRepository.findBySymbolOrderByLastUpdateTimeDesc(symbol);
     }
 
     public List<StockData> getHistoricalData(String symbol, LocalDateTime startDate) {
         return stockDataRepository.findHistoricalData(symbol, startDate);
+    }
+
+    public List<StockData> getRecentStockData(LocalDateTime since) {
+        return stockDataRepository.findAllRecentData(since);
+    }
+
+    public List<StockData> getLastNRecords(String symbol, int n) {
+        return stockDataRepository.findLastNRecords(symbol, n);
+    }
+
+    public List<StockData> getStocksAbovePrice(BigDecimal price) {
+        return stockDataRepository.findStocksAbovePrice(price);
+    }
+
+    public List<StockData> getTopGainers(BigDecimal minChangePercent) {
+        return stockDataRepository.findTopGainers(minChangePercent);
+    }
+
+    public List<StockData> getTopLosers(BigDecimal maxChangePercent) {
+        return stockDataRepository.findTopLosers(maxChangePercent);
+    }
+
+    public List<StockData> getHighVolumeStocks(Long minVolume) {
+        return stockDataRepository.findHighVolumeStocks(minVolume);
+    }
+
+    public List<StockData> getOversoldStocks(BigDecimal rsiThreshold) {
+        return stockDataRepository.findOversoldStocks(rsiThreshold);
+    }
+
+    public List<StockData> getOverboughtStocks(BigDecimal rsiThreshold) {
+        return stockDataRepository.findOverboughtStocks(rsiThreshold);
+    }
+
+    public List<StockData> getStocksWithBullishMACD() {
+        return stockDataRepository.findStocksWithBullishMACD();
+    }
+
+    public List<StockData> getStocksWithBearishMACD() {
+        return stockDataRepository.findStocksWithBearishMACD();
+    }
+
+    public List<StockData> getStocksBelowBollingerLower() {
+        return stockDataRepository.findStocksBelowBollingerLower();
+    }
+
+    public List<StockData> getStocksAboveBollingerUpper() {
+        return stockDataRepository.findStocksAboveBollingerUpper();
+    }
+
+    public List<StockData> getHistoricalDataBetweenDates(String symbol, LocalDateTime startDate, LocalDateTime endDate) {
+        return stockDataRepository.findHistoricalDataBetweenDates(symbol, startDate, endDate);
     }
 
     public List<String> getAllTrackedSymbols() {
