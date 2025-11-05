@@ -19,21 +19,50 @@ public class StockData {
     private Long id;
 
     private String symbol;
-    private BigDecimal price;
+    private String companyName;
+    private String industry;
+
+    @Column(name = "current_price")
+    private BigDecimal currentPrice;
+    private BigDecimal open;
+
+    @Column(name = "day_high")
+    private BigDecimal dayHigh;
+
+    @Column(name = "day_low")
+    private BigDecimal dayLow;
+
+    @Column(name = "previous_close")
+    private BigDecimal previousClose;
+
     @Column(name = "chg") // 'change' is a reserved keyword in MySQL
     private BigDecimal change;
+
     @Column(name = "change_percent")
     private BigDecimal changePercent;
-    private BigDecimal high;
-    private BigDecimal low;
+
     private Long volume;
-    private LocalDateTime timestamp;
+    private BigDecimal vwap;
+
+    @Column(name = "week_high")
+    private BigDecimal weekHigh;
+
+    @Column(name = "week_low")
+    private BigDecimal weekLow;
+
+    @Column(name = "upper_circuit")
+    private BigDecimal upperCircuit;
+
+    @Column(name = "lower_circuit")
+    private BigDecimal lowerCircuit;
+
+    @Column(name = "last_update_time")
+    private LocalDateTime lastUpdateTime;
+
+    // Technical indicators
     private BigDecimal ma20;
     private BigDecimal ma50;
     private BigDecimal rsi;
-    private String companyName;
-    private String sector;
-    private String industry;
     private BigDecimal marketCap;
 
     @Column(name = "macd")

@@ -38,16 +38,28 @@ public class NSEClientService {
             JsonNode root = objectMapper.readTree(response);
             Map<String, Object> stockData = new HashMap<>();
 
+            // Extract data from the correct paths in the JSON structure
             JsonNode info = root.path("info");
-            stockData.put("symbol", symbol);
-            stockData.put("currentPrice", parseBigDecimal(info.path("lastPrice").asText()));
-            stockData.put("dayHigh", parseBigDecimal(info.path("dayHigh").asText()));
-            stockData.put("dayLow", parseBigDecimal(info.path("dayLow").asText()));
-            stockData.put("previousClose", parseBigDecimal(info.path("previousClose").asText()));
-            stockData.put("change", parseBigDecimal(info.path("change").asText()));
-            stockData.put("changePercent", parseBigDecimal(info.path("pChange").asText()));
-            stockData.put("volume", info.path("totalTradedVolume").asLong());
-            stockData.put("tradedValue", parseBigDecimal(info.path("totalTradedValue").asText()));
+            JsonNode priceInfo = root.path("priceInfo");
+            JsonNode metadata = root.path("metadata");
+
+            stockData.put("symbol", info.path("symbol").asText());
+            stockData.put("companyName", info.path("companyName").asText());
+            stockData.put("industry", info.path("industry").asText());
+            stockData.put("currentPrice", parseBigDecimal(priceInfo.path("lastPrice").asText()));
+            stockData.put("open", parseBigDecimal(priceInfo.path("open").asText()));
+            stockData.put("dayHigh", parseBigDecimal(priceInfo.path("intraDayHighLow").path("max").asText()));
+            stockData.put("dayLow", parseBigDecimal(priceInfo.path("intraDayHighLow").path("min").asText()));
+            stockData.put("previousClose", parseBigDecimal(priceInfo.path("previousClose").asText()));
+            stockData.put("change", parseBigDecimal(priceInfo.path("change").asText()));
+            stockData.put("changePercent", parseBigDecimal(priceInfo.path("pChange").asText()));
+            stockData.put("volume", root.path("preOpenMarket").path("totalTradedVolume").asLong());
+            stockData.put("vwap", parseBigDecimal(priceInfo.path("vwap").asText()));
+            stockData.put("weekHigh", parseBigDecimal(priceInfo.path("weekHighLow").path("max").asText()));
+            stockData.put("weekLow", parseBigDecimal(priceInfo.path("weekHighLow").path("min").asText()));
+            stockData.put("upperCircuit", parseBigDecimal(priceInfo.path("upperCP").asText()));
+            stockData.put("lowerCircuit", parseBigDecimal(priceInfo.path("lowerCP").asText()));
+            stockData.put("lastUpdateTime", metadata.path("lastUpdateTime").asText());
 
             return stockData;
         } catch (Exception e) {
