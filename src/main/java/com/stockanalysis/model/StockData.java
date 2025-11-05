@@ -20,7 +20,9 @@ public class StockData {
 
     private String symbol;
     private BigDecimal price;
+    @Column(name = "chg") // 'change' is a reserved keyword in MySQL
     private BigDecimal change;
+    @Column(name = "change_percent")
     private BigDecimal changePercent;
     private BigDecimal high;
     private BigDecimal low;
